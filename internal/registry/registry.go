@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
@@ -85,10 +84,6 @@ func (c *Client) Execute(ctx context.Context, imageName string, action func(ref 
 	}
 
 	transportOption := c.newTransportOption(sourceRef)
-
-	if len(keychains) == 0 {
-		keychains = append(keychains, authn.DefaultKeychain)
-	}
 
 	errs := make([]error, 0, len(keychains))
 	for _, keychain := range keychains {

@@ -16,12 +16,32 @@ import (
 )
 
 type Config struct {
-	SkipLabels      []string   `koanf:"skipLabels"`
-	SkipAnnotations []string   `koanf:"skipAnnotations"`
-	Routing         Routing    `koanf:"routing"`
-	Mirroring       Mirroring  `koanf:"mirroring"`
-	Monitoring      Monitoring `koanf:"monitoring"`
-	Metrics         Metrics    `koanf:"metrics"`
+	SkipLabels      []string    `koanf:"skipLabels"`
+	SkipAnnotations []string    `koanf:"skipAnnotations"`
+	Routing         Routing     `koanf:"routing"`
+	Mirroring       Mirroring   `koanf:"mirroring"`
+	Monitoring      Monitoring  `koanf:"monitoring"`
+	Metrics         Metrics     `koanf:"metrics"`
+	AmbientAuth     AmbientAuth `koanf:"ambientAuth"`
+}
+
+// AmbientAuth configures opt-in ambient credential providers used when no
+// explicit pull secret is matched for a registry operation.
+type AmbientAuth struct {
+	Providers []AmbientProvider `koanf:"providers"`
+}
+
+// AmbientProvider selects and configures one ambient credential provider.
+// Set Type to the provider name; populate the matching nested config field.
+//
+// Registries is an optional list of registry hostnames (e.g. "us-docker.pkg.dev",
+// "docker.io") this provider applies to. When empty the provider handles its own
+// scoping (gcp uses google.Keychain's internal isGoogle() gate; jfrog scopes
+// itself to jfrog.hostname). Specifying registries lets you restrict a provider
+// explicitly and is useful when running multiple providers side-by-side.
+type AmbientProvider struct {
+	Type       string   `koanf:"type"`
+	Registries []string `koanf:"registries"`
 }
 
 type Routing struct {

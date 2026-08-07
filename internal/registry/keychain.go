@@ -15,18 +15,30 @@ type authConfigKeychain struct {
 }
 
 func (a *authConfigKeychain) Resolve(target authn.Resource) (authn.Authenticator, error) {
-	if target.String() != a.repositoryName {
+	// Normalize target.String() so docker.io and index.docker.io compare equal.
+	// go-containerregistry rewrites "docker.io" → "index.docker.io" internally,
+	// while distribution/reference keeps "docker.io". Without normalization,
+	// Docker Hub pull secrets would silently return Anonymous.
+	named, err := reference.ParseNormalizedNamed(target.String())
+	if err != nil || named.Name() != a.repositoryName {
 		return authn.Anonymous, nil
 	}
 	return authn.FromConfig(a.AuthConfig), nil
 }
 
+// GetKeychains returns keychains for the given repository. Explicit K8s pull
+// secrets are tried first, followed by any ambient providers registered via
+// SetupAmbientAuth, with authn.DefaultKeychain always last as a catch-all.
 func GetKeychains(repositoryName string, pullSecrets []corev1.Secret) ([]authn.Keychain, error) {
-	if keychains, err := getKeychainsFromSecrets(repositoryName, pullSecrets); err != nil {
+	keychains, err := getKeychainsFromSecrets(repositoryName, pullSecrets)
+	if err != nil {
 		return nil, err
-	} else {
-		return keychains, nil
 	}
+
+	keychains = append(keychains, getAmbientKeychains()...)
+	keychains = append(keychains, authn.DefaultKeychain)
+
+	return keychains, nil
 }
 
 func getKeychainsFromSecrets(repositoryName string, pullSecrets []corev1.Secret) ([]authn.Keychain, error) {

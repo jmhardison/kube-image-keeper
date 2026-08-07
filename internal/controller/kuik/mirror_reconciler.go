@@ -6,6 +6,7 @@ import (
 	"errors"
 	"iter"
 	"maps"
+	"net/http"
 	"path"
 	"slices"
 	"strings"
@@ -277,6 +278,9 @@ func (r *ImageSetMirrorBaseReconciler) setupController(mgr ctrl.Manager, name st
 	if err := r.setupGlobalPodFilter(); err != nil {
 		return err
 	}
+	if err := registry.SetupAmbientAuth(r.Config.AmbientAuth); err != nil {
+		return err
+	}
 	if r.Recorder == nil {
 		r.Recorder = mgr.GetEventRecorder(name)
 	}
@@ -418,17 +422,21 @@ func (r *ImageSetMirrorBaseReconciler) getImageSecretFromMirrors(ctx context.Con
 }
 
 func (r *ImageSetMirrorBaseReconciler) mirrorImage(ctx context.Context, namespace string, mirrors kuikv1alpha1.Mirrors, podsByMatchingImages map[string]*corev1.Pod, from string, to *kuikv1alpha1.MirrorStatus) (err error) {
-	srcSecrets, err := r.getPullSecretsFromPods(ctx, podsByMatchingImages, from)
+	destSecret, err := r.getImageSecretFromMirrors(ctx, to.Image, namespace, mirrors)
 	if err != nil {
 		return err
 	}
 
-	destSecrets := make([]corev1.Secret, 1)
-	if secret, err := r.getImageSecretFromMirrors(ctx, to.Image, namespace, mirrors); err != nil {
-		return err
-	} else if secret != nil {
-		destSecrets[0] = *secret
+	destSecrets := []corev1.Secret{}
+	if destSecret != nil {
+		destSecrets = append(destSecrets, *destSecret)
 	}
+
+	srcSecrets, err := r.getPullSecretsFromPods(ctx, podsByMatchingImages, from)
+	if err != nil {
+		return err
+	}
+	srcSecrets = append(srcSecrets, destSecrets...)
 
 	defer func() {
 		if err != nil {
@@ -467,12 +475,18 @@ func (r *ImageSetMirrorBaseReconciler) cleanupMirror(ctx context.Context, image,
 	if err != nil {
 		log.Error(err, "could not read secret for image deletion")
 		return false
-	} else if secret == nil {
-		log.V(1).Info("no secret is configured for deleting image, ignoring")
-		return true
+	}
+	secrets := []corev1.Secret{}
+	if secret != nil {
+		secrets = append(secrets, *secret)
 	}
 
-	if err := registry.NewClient(nil, nil).WithPullSecrets([]corev1.Secret{*secret}).DeleteImage(ctx, image); err != nil {
+	if err := registry.NewClient(nil, nil).WithPullSecrets(secrets).DeleteImage(ctx, image); err != nil {
+		statusCode := registry.TransportStatusCode(err)
+		if secret == nil && (statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden) {
+			log.V(1).Info("no credentials configured for image deletion and ambient auth was rejected, skipping", "statusCode", statusCode)
+			return true
+		}
 		log.Error(err, "could not delete image")
 		return false
 	}
