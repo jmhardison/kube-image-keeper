@@ -7,28 +7,139 @@ updates:
       interval: "monthly"
     groups:
       minor-and-patch:
+        applies-to: version-updates
         patterns:
           - "*"
         update-types:
           - "minor"
           - "patch"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
   - package-ecosystem: "gomod"
-    # Security updates have a separate, internal limit of ten open pull requests
+    # Limit of 2 so that a pending kubernetes group PR does not block routine
+    # updates. Security updates have a separate, internal limit of ten open
+    # pull requests:
     # https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#open-pull-requests-limit-
-    open-pull-requests-limit: 1
+    open-pull-requests-limit: 2
     directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
       time: "10:00"
       timezone: "Europe/Paris"
+    # Supply-chain protection: wait a few days before adopting fresh releases.
+    # Does not delay security updates.
+    cooldown:
+      default-days: 7
+    groups:
+      # Kubernetes libraries follow the controller-runtime / Kubernetes
+      # compatibility matrix, so their bumps get a dedicated PR to be reviewed
+      # on their own instead of riding along with routine updates
+      kubernetes:
+        applies-to: version-updates
+        patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+      minor-and-patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "k8s.io/*"
+          - "sigs.k8s.io/*"
+        update-types:
+          - "minor"
+          - "patch"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "npm"
+    open-pull-requests-limit: 1
+    directory: "/website"
+    schedule:
+      interval: "monthly"
+    cooldown:
+      default-days: 7
     groups:
       minor-and-patch:
+        applies-to: version-updates
         patterns:
           - "*"
         update-types:
           - "minor"
           - "patch"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    open-pull-requests-limit: 1
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    groups:
+      all:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  # Maintenance branch: conservative patch-only updates as a proxy for
+  # security fixes, since alert-driven security updates only target the
+  # default branch. The "fix" commit prefix makes semantic-release cut a
+  # patch release on merge. Update target-branch when a new maintenance
+  # branch is cut (see CONTRIBUTING.md, "Cutting a maintenance branch").
+  - package-ecosystem: "gomod"
+    open-pull-requests-limit: 1
+    directory: "/"
+    target-branch: "2.3.x"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "Europe/Paris"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
     ignore:
-      - dependency-name: k8s.io/*
-        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+    groups:
+      patch:
+        applies-to: version-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker"
+    open-pull-requests-limit: 1
+    directory: "/"
+    target-branch: "2.3.x"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "10:00"
+      timezone: "Europe/Paris"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+          - "version-update:semver-minor"
+    groups:
+      patch:
+        applies-to: version-updates
+        patterns:
+          - "*"

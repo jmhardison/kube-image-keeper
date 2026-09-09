@@ -29,6 +29,7 @@ skipAnnotations: []
 routing:
   activeCheck:
     timeout: 1s
+    resolveDigest: false
     staleMirrorCleanup:
       maxConcurrent: 10
       timeout: 5s
@@ -45,6 +46,7 @@ monitoring:
       method: HEAD
       interval: 3h
       maxPerInterval: 25
+      resolveDigest: false
       # timeout: 0          (no per-check timeout)
       # fallbackCredentialSecret:
       #   namespace: ...
@@ -93,7 +95,8 @@ Controls the mutating webhook that rewrites Pod container images.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
-| `routing.activeCheck.timeout` | duration | `1s` | Per-image upper bound on the availability HTTP probe (HEAD request) made by the webhook before falling back to the next alternative. |
+| `routing.activeCheck.timeout` | duration | `1s` | Per-image upper bound on the availability HTTP probe (HEAD request) made by the webhook before falling back to the next alternative. When `resolveDigest` is enabled, this budget covers both requests. |
+| `routing.activeCheck.resolveDigest` | bool | `false` | When `true`, tag references are checked a second time by manifest digest, catching registries that serve a tag whose manifest is gone. References already pinned to a digest are not rechecked. See [Stale tag caches on pull-through proxies](./guides/troubleshooting.md#stale-tag-caches-on-pull-through-proxies). |
 | `routing.activeCheck.staleMirrorCleanup.maxConcurrent` | int | `10` | Maximum number of concurrent goroutines clearing stale mirror status entries. The cleanup is dropped (not retried inline) if the semaphore is full; the next availability check that returns `NotFound` will trigger it again. |
 | `routing.activeCheck.staleMirrorCleanup.timeout` | duration | `5s` | Per-cleanup deadline for the goroutine that clears a stale mirror status entry. |
 | `routing.rewriteOnNeverImagePullPolicy` | bool | `false` | When `false`, containers with `imagePullPolicy: Never` are left untouched (the cluster-local image is assumed authoritative). Set to `true` to rewrite them as well. |
@@ -103,8 +106,7 @@ Durations use Go's `time.ParseDuration` syntax (`"500ms"`, `"30s"`, `"2h"`, ...)
 
 ### Example
 
-Lower the active-check timeout, keep `Always` containers in the standard
-priority sort:
+Lower the active-check timeout and keep `Always` containers in the standard priority sort:
 
 ```yaml
 routing:
@@ -165,8 +167,9 @@ Controls the rate at which `ClusterImageSetAvailability` checks reach upstream r
 | --- | --- | --- | --- |
 | `method` | string | `HEAD` | HTTP method for the availability probe. `HEAD` or `GET`. |
 | `interval` | duration | `3h` | Time window over which `maxPerInterval` checks are spread for that registry. |
-| `maxPerInterval` | int | `25` | Maximum number of image checks per `interval` for the registry. |
+| `maxPerInterval` | int | `25` | Maximum number of image checks per `interval` for the registry. When `resolveDigest` is enabled, each tag-reference check makes two requests (digest references still make one). |
 | `timeout` | duration | `0` (no timeout) | Deadline per individual check. |
+| `resolveDigest` | bool | unset (disabled) | Same digest check as `routing.activeCheck.resolveDigest`, applied to monitoring probes. An `items` entry leaving it unset inherits the `default` value; setting it to `false` opts that registry out. See [Stale tag caches on pull-through proxies](./guides/troubleshooting.md#stale-tag-caches-on-pull-through-proxies). |
 | `fallbackCredentialSecret` | object | unset | Reference (`name`, `namespace`) to a `kubernetes.io/dockerconfigjson` Secret used when no Pod-level pull secret is available for the image. |
 
 ### Default for `monitoring.registries.items`
