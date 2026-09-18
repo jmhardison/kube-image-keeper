@@ -1,0 +1,58 @@
+############
+# v2       #
+############
+apiVersion: kuik.enix.io/v1alpha1
+kind: ClusterImageSetMirror
+metadata:
+  name: registry-global
+spec:
+  cleanup:
+    enabled: true
+    retention: 168h
+  imageFilter:
+    exclude:
+      # Exclude images used by CNPG pods as this conflict with cnpg-operator
+      - .+/cloudnative-pg/(postgresql|cloudnative-pg):.+
+      - dev-registry.tld/huge-image-repo/.+
+    include:
+      - .*
+  mirrors:
+    - credentialSecret:
+        name: registry-global
+        namespace: kuik-system
+      path: /mirror
+      registry: registry.example.com
+  priority: -10
+---
+############
+# v3       #
+############
+apiVersion: kuik.enix.io/v1alpha1
+kind: ImageMirror
+metadata:
+  name: registry-global
+spec:
+  rewritePolicy: Always
+  podSelector:
+    # Better exclusion for pod managed by CNPG as image may vary
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: DoesNotExist
+  excludeImages:
+    - dev-registry.tld/huge-image-repo/**
+  destination:
+    path: registry.example.com/mirror/
+    manage:
+      auth:
+        secretRef:
+          name: registry-global
+    # v3 splits the controller's credential from the injected one, so the mirror is managed with a
+    # read/write/delete account while namespaces only get a read only one. v2 had a single
+    # `credentialSecret` used for both, reusing `registry-global` here would also be valid.
+    pull:
+      auth:
+        secretRef:
+          name: registry-pull-creds
+  cleanup:
+    enabled: true
+    retention: 168h
